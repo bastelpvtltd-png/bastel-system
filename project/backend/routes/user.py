@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 import pandas as pd
 import os
+from openpyxl import load_workbook
 
 # Route definition
 users_bp = Blueprint('users', __name__)
@@ -62,8 +63,8 @@ def add_user():
         # Row eka ekathu kirima
         df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
 
-        # Excel ekata writing
-        with pd.ExcelWriter(EXCEL_PATH, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
+        # Excel ekata writing (Fixed: removed mode='a' and if_sheet_exists)
+        with pd.ExcelWriter(EXCEL_PATH, engine='openpyxl') as writer:
             df.to_excel(writer, sheet_name='users', index=False)
 
         return jsonify({"message": "Saarthakava daththa athulath kala!"}), 200
