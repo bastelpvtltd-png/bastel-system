@@ -11,24 +11,32 @@ except ImportError:
 
 app = Flask(__name__)
 
-# CORS Settings - Frontend එකට access ලබා දීම
+# CORS Settings
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-# --- Dynamic Path Logic (Local & Render) ---
+# --- Dynamic Path Logic (Updated for project/data.xlsx) ---
 def find_excel():
     # app.py තියෙන තැන (project/backend)
     base_dir = os.path.dirname(os.path.abspath(__file__))
     
-    # ඔයාගේ GitHub structure එකට අනුව පරීක්ෂා කළ යුතු ස්ථාන
+    # පරීක්ෂා කළ යුතු නිවැරදි ස්ථාන
     potential_paths = [
-        os.path.abspath(os.path.join(base_dir, '..', '..', 'data.xlsx')), # bastelsystem3/data.xlsx
-        os.path.abspath(os.path.join(base_dir, '..', 'data.xlsx')),       # project/data.xlsx
-        os.path.abspath(os.path.join(base_dir, 'data.xlsx')),             # backend/data.xlsx
-        os.path.join(os.getcwd(), 'data.xlsx')                            # Root working directory
+        # 1. app.py එකෙන් එකක් පිටුපසට (project/data.xlsx) - මේක තමයි ඔයා කිව්ව තැන
+        os.path.abspath(os.path.join(base_dir, '..', 'data.xlsx')),
+        
+        # 2. Root එකේ තිබුණොත් (bastel-system/data.xlsx)
+        os.path.abspath(os.path.join(base_dir, '..', '..', 'data.xlsx')),
+        
+        # 3. Backend folder එකේම තිබුණොත්
+        os.path.abspath(os.path.join(base_dir, 'data.xlsx')),
+        
+        # 4. Current working directory (Render root)
+        os.path.join(os.getcwd(), 'data.xlsx')
     ]
     
     for path in potential_paths:
         if os.path.exists(path):
+            print(f"Excel Found at: {path}") # Debugging සඳහා
             return path
     return None
 
@@ -36,19 +44,17 @@ EXCEL_PATH = find_excel()
 
 @app.route('/api/nav-config', methods=['GET'])
 def get_nav_config():
-    # File එක හොයාගන්න බැරි වුණොත් debug info එකක් දෙනවා
     if not EXCEL_PATH:
         return jsonify({
             "error": "Excel file eka soyaagatha noheka!",
             "debug": {
-                "current_dir": os.getcwd(),
-                "base_dir": os.path.dirname(os.path.abspath(__file__)),
-                "all_files_here": os.listdir(os.getcwd())
+                "current_working_dir": os.getcwd(),
+                "app_py_dir": os.path.dirname(os.path.abspath(__file__)),
+                "files_in_project_folder": os.listdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
             }
         }), 404
         
     try:
-        # Excel එක කියවීම
         df = pd.read_excel(EXCEL_PATH, sheet_name='TAB')
         nav_data = []
 
@@ -74,7 +80,6 @@ def get_nav_config():
     except Exception as e:
         return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500
 
-# Blueprint Register කිරීම
 if users_bp:
     app.register_blueprint(users_bp)
 
@@ -83,6 +88,5 @@ def index():
     return "Bastel System Backend is Running Successfully!"
 
 if __name__ == "__main__":
-    # Render එකට 10000 port එකත්, Localhost එකට 5000 port එකත් පාවිච්චි වේ
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
