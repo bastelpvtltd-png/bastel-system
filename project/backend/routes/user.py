@@ -35,6 +35,10 @@ def add_user():
     username = data.get('username')
     password = data.get('password')
 
+    # Input validation
+    if not all([full_name, designation, phone, email, username, password]):
+        return jsonify({"message": "Mahatwapurna fields eka empty nane!"}), 400
+
     try:
         # Excel eka kiyaveema
         df = pd.read_excel(EXCEL_PATH, sheet_name='users', engine='openpyxl')
@@ -63,12 +67,23 @@ def add_user():
         # Row eka ekathu kirima
         df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
 
-        # Excel ekata writing (Fixed: removed mode='a' and if_sheet_exists)
-        with pd.ExcelWriter(EXCEL_PATH, engine='openpyxl') as writer:
+        # ✅ PROPER FIX: openpyxl load_workbook use කරලා sheet safe handle කරන්න
+        wb = load_workbook(EXCEL_PATH)
+        
+        # 'users' sheet exist කරන්නේ check කරන්න
+        if 'users' in wb.sheetnames:
+            wb.remove(wb['users'])
+        
+        wb.close()
+
+        # Excel ekata writing - mode='a' එකත් if_sheet_exists එකත් set කරන්න
+        with pd.ExcelWriter(EXCEL_PATH, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
             df.to_excel(writer, sheet_name='users', index=False)
 
         return jsonify({"message": "Saarthakava daththa athulath kala!"}), 200
 
+    except FileNotFoundError:
+        return jsonify({"message": "Excel file eka kiyana noheka!"}), 404
     except Exception as e:
         print(f"Error: {str(e)}")
         return jsonify({"message": f"Doshyak siduviya: {str(e)}"}), 500
