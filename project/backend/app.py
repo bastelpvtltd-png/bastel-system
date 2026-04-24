@@ -3,35 +3,47 @@ from flask_cors import CORS
 import pandas as pd
 import os
 
-# routes folder eke athi user.py import kirima
+# routes folder එකේ ඇති user.py import කිරීම
 from routes.user import users_bp 
 
 app = Flask(__name__)
 
-# Frontend (3000) saha Backend (5000) athara kriyaakarithwayata
-CORS(app) 
+# CORS Settings - Frontend එක GitHub/Live තියෙන නිසා මෙහෙම දීම ආරක්ෂිතයි
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-# Excel file eka thiyena path eka
-EXCEL_PATH = r"C:\Users\USER\Desktop\bastelsystem3\data.xlsx"
+# --- නිවැරදි Path Logic එක ---
+# 1. මුලින්ම app.py තියෙන තැන (backend folder එක) හොයාගන්නවා
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# --- Dynamic Navigation Logic ---
+# 2. backend එකෙන් එළියට (project folder එකට) එන්න එකයි (..), 
+#    එතනින් තව එකක් එළියට (bastelsystem3 folder එකට) එන්න එකයි (..)
+#    දැන් එතන තමයි data.xlsx තියෙන්නේ.
+EXCEL_PATH = os.path.normpath(os.path.join(BASE_DIR, '..', '..', 'data.xlsx'))
+
 @app.route('/api/nav-config', methods=['GET'])
 def get_nav_config():
     try:
-        if not os.path.exists(EXCEL_PATH):
-            return jsonify({"error": "Excel file eka soyaagatha noheka!"}), 404
+        # Debugging: Render logs වල path එක හරියට වැටෙනවද බලන්න මේක ඕනේ
+        print(f"Searching Excel at: {EXCEL_PATH}")
 
-        # 'TAB' sheet eka kiyaveema
+        if not os.path.exists(EXCEL_PATH):
+            return jsonify({
+                "error": "Excel file එක සොයාගත නොහැක!",
+                "tried_path": EXCEL_PATH
+            }), 404
+
+        # 'TAB' sheet එක කියවීම
         df = pd.read_excel(EXCEL_PATH, sheet_name='TAB')
         nav_data = []
 
         for _, row in df.iterrows():
+            if pd.isna(row.get('MAIN')):
+                continue
+
             main_label = str(row['MAIN']).strip()
-            # Path eka hadaddi space ain karala '-' dala simple letters karanawa
             main_path = main_label.lower().replace(' ', '-')
             
-            sub_str = str(row['SUB']).strip()
-            # Comma thiyena than walin wen karala list ekak hadagannawa
+            sub_str = str(row['SUB']).strip() if not pd.isna(row['SUB']) else ""
             subs = [s.strip() for s in sub_str.split(',') if s.strip()]
             
             nav_data.append({
@@ -44,15 +56,15 @@ def get_nav_config():
 
     except Exception as e:
         print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500
 
-# Routes register kirima
 app.register_blueprint(users_bp)
 
 @app.route('/')
 def index():
-    return "Python Backend is Running!"
+    return "Bastel System Backend is Running!"
 
 if __name__ == "__main__":
-    # Port 5000 hi kriyaathmaka we
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # Render එකට අවශ්‍ය port එක auto ලබා ගැනීම
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
