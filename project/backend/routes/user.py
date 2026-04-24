@@ -5,11 +5,26 @@ import os
 # Route definition
 users_bp = Blueprint('users', __name__)
 
-EXCEL_PATH = r"C:\Users\USER\Desktop\bastelsystem3\data.xlsx"
+# Dynamic Excel Path (Windows සහ Linux දෙකටම work කරනවා)
+def get_excel_path():
+    potential_paths = [
+        os.path.abspath(os.path.join(os.getcwd(), 'data.xlsx')),
+        os.path.abspath(os.path.join(os.getcwd(), 'project', 'data.xlsx')),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'data.xlsx')),
+    ]
+    
+    for path in potential_paths:
+        if os.path.exists(path):
+            return path
+    return None
 
 @users_bp.route('/api/add-user', methods=['POST'])
 def add_user():
     data = request.json
+    
+    EXCEL_PATH = get_excel_path()
+    if not EXCEL_PATH:
+        return jsonify({"message": "Excel file eka soyaagatha noheka!"}), 404
     
     # Frontend eken ena daththa
     full_name = data.get('fullName')
@@ -21,10 +36,7 @@ def add_user():
 
     try:
         # Excel eka kiyaveema
-        if os.path.exists(EXCEL_PATH):
-            df = pd.read_excel(EXCEL_PATH, sheet_name='users')
-        else:
-            return jsonify({"message": "Excel file eka soyaagatha noheka!"}), 404
+        df = pd.read_excel(EXCEL_PATH, sheet_name='users', engine='openpyxl')
 
         # Validation: Duplicate check
         is_duplicate = df[
