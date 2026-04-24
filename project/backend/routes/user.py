@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 import pandas as pd
 import os
 
-# Route එක අර්ථ දැක්වීම
+# Route definition
 users_bp = Blueprint('users', __name__)
 
 EXCEL_PATH = r"C:\Users\USER\Desktop\bastelsystem3\data.xlsx"
@@ -11,7 +11,7 @@ EXCEL_PATH = r"C:\Users\USER\Desktop\bastelsystem3\data.xlsx"
 def add_user():
     data = request.json
     
-    # Frontend එකෙන් එන දත්ත
+    # Frontend eken ena daththa
     full_name = data.get('fullName')
     designation = data.get('designation')
     phone = data.get('phoneNumber')
@@ -20,14 +20,13 @@ def add_user():
     password = data.get('password')
 
     try:
-        # Excel එක කියවීම
+        # Excel eka kiyaveema
         if os.path.exists(EXCEL_PATH):
             df = pd.read_excel(EXCEL_PATH, sheet_name='users')
         else:
-            return jsonify({"message": "Excel file එක සොයාගත නොහැක!"}), 404
+            return jsonify({"message": "Excel file eka soyaagatha noheka!"}), 404
 
-        # Validation: එකම Phone, Email, Username තියෙනවද බැලීම
-        # මෙතන column names ඔබේ Excel එකේ තියෙන විදියටම තියෙන්න ඕනේ
+        # Validation: Duplicate check
         is_duplicate = df[
             (df['Full Name'] == full_name) | 
             (df['Phone Number'] == phone) | 
@@ -36,9 +35,9 @@ def add_user():
         ]
 
         if not is_duplicate.empty:
-            return jsonify({"message": "මෙම දත්ත පද්ධතියේ දැනටමත් පවතී!"}), 400
+            return jsonify({"message": "Memma daththa system eke pavathi!"}), 400
 
-        # අලුත් දත්ත පේළිය
+        # Aluth data row eka
         new_data = {
             "Full Name": full_name,
             "Designation": designation,
@@ -48,15 +47,15 @@ def add_user():
             "Password": password
         }
 
-        # අලුත් පේළිය එකතු කිරීම
+        # Row eka ekathu kirima
         df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
 
-        # Excel එකට නැවත ලිවීම
-        with pd.ExcelWriter(EXCEL_PATH, engine='openpyxl', mode='w') as writer:
+        # Excel ekata writing
+        with pd.ExcelWriter(EXCEL_PATH, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
             df.to_excel(writer, sheet_name='users', index=False)
 
-        return jsonify({"message": "සාර්ථකව දත්ත ඇතුළත් කළා!"}), 200
+        return jsonify({"message": "Saarthakava daththa athulath kala!"}), 200
 
     except Exception as e:
         print(f"Error: {str(e)}")
-        return jsonify({"message": "දත්ත ඇතුළත් කිරීමේදී දෝෂයක් සිදුවිය."}), 500
+        return jsonify({"message": f"Doshyak siduviya: {str(e)}"}), 500

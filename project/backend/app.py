@@ -1,14 +1,14 @@
 from flask import Flask
 from flask_cors import CORS
-# මෙතන routes ෆෝල්ඩරයේ ඇති user.py එක import කරගන්නවා
+# routes folder eke athi user.py import kirima
 from routes.user import users_bp 
 
 app = Flask(__name__)
 
-# වැදගත්: Frontend (3000) එකට Backend (5000) සමඟ වැඩ කිරීමට ඉඩ දීම
+# Frontend (3000) saha Backend (5000) athara kriyaakarithwayata
 CORS(app) 
 
-# Routes සම්බන්ධ කිරීම
+# Routes register kirima
 app.register_blueprint(users_bp)
 
 @app.route('/')
@@ -16,5 +16,5 @@ def index():
     return "Python Backend is Running!"
 
 if __name__ == "__main__":
-    # මෙය Port 5000 හි ක්‍රියාත්මක වේ
+    # Port 5000 hi kriyaathmaka we
     app.run(host="0.0.0.0", port=5000, debug=True)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
 const navItems = [
@@ -22,6 +22,13 @@ export default function Navbar({ username, onLogout }: NavbarProps) {
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [contactTab, setContactTab] = useState<"owner" | "workers">("owner");
   const [showContact, setShowContact] = useState(false);
+  
+  // Hydration error eka fix kirima sandaha
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   return (
     <>
@@ -60,7 +67,8 @@ export default function Navbar({ username, onLogout }: NavbarProps) {
             onClick={() => setActiveModal("Profile")}
             className="text-green-400 border border-blue-700 px-3 py-1 rounded text-sm hover:bg-blue-900 transition"
           >
-            {username}
+            {/* Server eken ena text eka client eke text ekata match wenna meka check karai */}
+            {isMounted ? username : "Loading..."}
           </button>
 
           <button
