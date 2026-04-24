@@ -10,7 +10,8 @@ export default function JobLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Backend එකෙන් Excel data ටික ලබා ගැනීම
-    fetch("http://localhost:5000/api/nav-config")
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+    fetch(`${apiUrl}/api/nav-config`)
       .then((res) => res.json())
       .then((data) => {
         // JOB කියන MAIN ටැබ් එකට අදාළ SUB ටැබ් ටික වෙන් කර ගැනීම

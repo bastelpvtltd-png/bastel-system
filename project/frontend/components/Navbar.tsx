@@ -29,7 +29,8 @@ export default function Navbar({ username, onLogout }: NavbarProps) {
     setIsMounted(true);
     
     // Backend එකෙන් Excel data (JSON) ලබා ගැනීම
-    fetch("http://localhost:5000/api/nav-config")
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+    fetch(`${apiUrl}/api/nav-config`)
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
