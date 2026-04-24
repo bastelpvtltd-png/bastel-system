@@ -1,52 +1,58 @@
 "use client";
-
+import { useState, useEffect } from "react";
+import PageLayout from "@/components/PageLayout";
 import { useRouter, usePathname } from "next/navigation";
-import Navbar from "@/components/Navbar";
-import { useMemo, useState } from "react";
-
-const subTabs = [
-  { name: "Open User Accounts", path: "/system/open-user-accounts" },
-  { name: "Access", path: "/system/access" },
-  { name: "Shippers", path: "/system/shippers" },
-  { name: "Wharf Details", path: "/system/wharf-details" },
-  { name: "Driver Details", path: "/system/driver-details" },
-  { name: "Templates", path: "/system/templates" },
-  { name: "Billing", path: "/system/billing" },
-];
 
 export default function SystemLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [username] = useState(() =>
-    typeof window !== "undefined" ? localStorage.getItem("username") || "User" : "User"
-  );
+  const [tabs, setTabs] = useState<{ name: string; href: string }[]>([]);
 
-  const handleLogout = useMemo(() => () => {
-    localStorage.clear();
-    router.push("/");
-  }, [router]);
+  useEffect(() => {
+    // Backend එකෙන් Excel data ටික ලබා ගැනීම
+    fetch("http://localhost:5000/api/nav-config")
+      .then((res) => res.json())
+      .then((data) => {
+        // SYSTEM කියන MAIN ටැබ් එකට අදාළ SUB ටැබ් ටික වෙන් කර ගැනීම
+        const systemConfig = data.find((item: any) => item.label.toUpperCase() === "SYSTEM");
+        if (systemConfig) {
+          const formattedTabs = systemConfig.subs.map((sub: string) => {
+            // URL එක හැමවෙලේම simple letters වලින් සහ space වෙනුවට "-" සහිතව සාදයි
+            // උදා: "DRIVER DETAILS" -> "driver-details"
+            const folderFriendlyName = sub.toLowerCase().trim().replace(/\s+/g, "-");
+            return {
+              name: sub,
+              href: `/system/${folderFriendlyName}`
+            };
+          });
+          setTabs(formattedTabs);
+        }
+      })
+      .catch((err) => console.error("System tabs load error:", err));
+  }, []);
+
+  // URL එකට ගැලපෙන ටැබ් එක highlight කිරීම (Case-insensitive matching)
+  const activeTab = tabs.find(
+    (t) => t.href.toLowerCase() === pathname.toLowerCase()
+  );
+  
+  const activeTabName = activeTab ? activeTab.name : (tabs[0]?.name || "Open User Accounts");
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-950">
-      <Navbar username={username} onLogout={handleLogout} />
-      <main className="flex-1 flex pt-[70px] pb-[70px]">
-        <div className="w-64 bg-blue-950 border-r border-green-900 flex flex-col pt-4 gap-1 px-2">
-          {subTabs.map((tab) => (
-            <button
-              key={tab.path}
-              onClick={() => router.push(tab.path)}
-              className={`text-left px-4 py-2 rounded text-sm transition ${
-                pathname === tab.path
-                  ? "bg-green-700 text-white font-bold"
-                  : "text-green-400 hover:bg-green-900"
-              }`}
-            >
-              {tab.name}
-            </button>
-          ))}
-        </div>
-        <div className="flex-1 p-6">{children}</div>
-      </main>
-    </div>
+    <PageLayout
+      title="System"
+      tabs={tabs}
+      activeTab={activeTabName}
+      onTabClick={(name: string) => {
+        // ටැබ් එකක් ක්ලික් කළාම අදාළ href එකට navigate කිරීම
+        const target = tabs.find((t) => t.name === name);
+        if (target) {
+          // ක්ලික් කළ විට lowercase කරන ලද URL එකට යොමු කරයි
+          router.push(target.href);
+        }
+      }}
+    >
+      {children}
+    </PageLayout>
   );
 }

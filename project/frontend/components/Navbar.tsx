@@ -3,13 +3,11 @@
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
-const navItems = [
-  { label: "Dashboard", href: "/dashboard", subs: ["Summary", "My Work", "All Works", "Search"] },
-  { label: "Job", href: "/job", subs: ["New Shipment", "Invoice Create", "Cusdec", "CDN", "Barcode", "Boat Note", "Final Docs"] },
-  { label: "System", href: "/system", subs: ["Open Account", "Access", "Shippers", "Wharf Details", "Driver Details", "Templates", "Billing"] },
-  { label: "Automation", href: "/automation", subs: ["Boat Note Pass", "Export Release", "Payments"] },
-  { label: "Settings", href: "/settings", subs: [] },
-];
+interface NavItem {
+  label: string;
+  href: string;
+  subs: string[];
+}
 
 interface NavbarProps {
   username: string;
@@ -22,12 +20,23 @@ export default function Navbar({ username, onLogout }: NavbarProps) {
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [contactTab, setContactTab] = useState<"owner" | "workers">("owner");
   const [showContact, setShowContact] = useState(false);
-  
-  // Hydration error eka fix kirima sandaha
   const [isMounted, setIsMounted] = useState(false);
+
+  // --- Dynamic Nav Data State ---
+  const [navItems, setNavItems] = useState<NavItem[]>([]);
 
   useEffect(() => {
     setIsMounted(true);
+    
+    // Backend එකෙන් Excel data (JSON) ලබා ගැනීම
+    fetch("http://localhost:5000/api/nav-config")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setNavItems(data);
+        }
+      })
+      .catch((err) => console.error("Error loading nav config:", err));
   }, []);
 
   return (
@@ -37,6 +46,7 @@ export default function Navbar({ username, onLogout }: NavbarProps) {
         <h1 className="text-green-400 font-bold text-xl tracking-widest">BASTEL PVT LTD</h1>
 
         <div className="flex items-center gap-2">
+          {/* Excel එකෙන් එන Main Tabs මෙතන load වෙනවා */}
           {navItems.map((item) => (
             <button
               key={item.label}
@@ -67,7 +77,6 @@ export default function Navbar({ username, onLogout }: NavbarProps) {
             onClick={() => setActiveModal("Profile")}
             className="text-green-400 border border-blue-700 px-3 py-1 rounded text-sm hover:bg-blue-900 transition"
           >
-            {/* Server eken ena text eka client eke text ekata match wenna meka check karai */}
             {isMounted ? username : "Loading..."}
           </button>
 
@@ -95,7 +104,7 @@ export default function Navbar({ username, onLogout }: NavbarProps) {
         <p className="text-gray-500 text-xs mt-1">BASTEL PVT LTD — Version 1.2.0</p>
       </footer>
 
-      {/* MODAL — Mails / Messages / Profile */}
+      {/* MODALs (Mails / Messages / Contact) */}
       {activeModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="bg-gray-900 border border-green-800 rounded-lg shadow-xl w-[420px] p-6">
@@ -108,7 +117,6 @@ export default function Navbar({ username, onLogout }: NavbarProps) {
         </div>
       )}
 
-      {/* MODAL — Contact */}
       {showContact && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="bg-gray-900 border border-green-800 rounded-lg shadow-xl w-[460px] p-6">
