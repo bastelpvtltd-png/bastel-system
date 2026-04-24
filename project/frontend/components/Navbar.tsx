@@ -29,7 +29,7 @@ export default function Navbar({ username, onLogout }: NavbarProps) {
     setIsMounted(true);
     
     // Backend එකෙන් Excel data (JSON) ලබා ගැනීම
-    fetch("http://localhost:5000/api/nav-config")
+    fetch("https://bastel-backend.onrender.com/api/nav-config")
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
