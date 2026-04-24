@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# එහෙත් .env.example එක විතරක් GitHub යන්න ඉඩ දෙන්න (අවශ්‍ය නම් පමණි)
+!.env.example

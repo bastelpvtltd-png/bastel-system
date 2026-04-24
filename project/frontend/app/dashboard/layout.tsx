@@ -8,18 +8,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const [tabs, setTabs] = useState<{ name: string; href: string }[]>([]);
 
+  // 1. GitHub දාද්දී URL එක hide කරන්න Environment Variable එකක් පාවිච්චි කරනවා
+  // Local එකේදී http://localhost:5000 ගන්නවා, හැබැයි GitHub/Deployment වලදී ඒ අදාළ URL එක ගන්නවා
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
   useEffect(() => {
-    // Backend එකෙන් Excel data ටික ලබා ගැනීම
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-    fetch(`${apiUrl}/api/nav-config`)
-      .then((res) => res.json())
-      .then((data) => {
+    const fetchDashboardTabs = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/nav-config`);
+        
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+
+        const data = await res.json();
+
         // Dashboard කියන MAIN ටැබ් එකට අදාළ SUB ටැබ් ටික වෙන් කර ගැනීම
-        const dashboardConfig = data.find((item: any) => item.label.toUpperCase() === "DASHBOARD");
-        if (dashboardConfig) {
+        const dashboardConfig = data.find(
+          (item: any) => item.label.toUpperCase() === "DASHBOARD"
+        );
+
+        if (dashboardConfig && Array.isArray(dashboardConfig.subs)) {
           const formattedTabs = dashboardConfig.subs.map((sub: string) => {
-            // URL එක හැමවෙලේම simple letters වලින් සහ space වෙනුවට "-" සහිතව සාදයි
-            // එවිට Folder එක 'summery' හෝ 'my-work' ලෙස තිබුණොත් නිවැරදිව Load වේ
+            // URL එක safe විදිහට format කරනවා
             const folderFriendlyName = sub.toLowerCase().trim().replace(/\s+/g, "-");
             return {
               name: sub,
@@ -28,11 +39,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           });
           setTabs(formattedTabs);
         }
-      })
-      .catch((err) => console.error("Dashboard tabs load error:", err));
-  }, []);
+      } catch (err) {
+        console.error("Dashboard tabs load error:", err);
+      }
+    };
 
-  // URL එකට ගැලපෙන ටැබ් එක highlight කිරීම (Case-insensitive matching)
+    fetchDashboardTabs();
+  }, [API_BASE_URL]);
+
+  // URL එකට ගැලපෙන ටැබ් එක highlight කිරීම
   const activeTab = tabs.find(
     (t) => t.href.toLowerCase() === pathname.toLowerCase()
   );
@@ -45,10 +60,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       tabs={tabs}
       activeTab={activeTabName}
       onTabClick={(name: string) => {
-        // ටැබ් එකක් ක්ලික් කළාම අදාළ href එකට navigate කිරීම
         const target = tabs.find((t) => t.name === name);
         if (target) {
-          // ක්ලික් කළ විට lowercase කරන ලද URL එකට යොමු කරයි
           router.push(target.href);
         }
       }}
