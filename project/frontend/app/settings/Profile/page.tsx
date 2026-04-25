@@ -1,4 +1,5 @@
 "use client";
+
 import { useAuth } from "@/lib/useAuth";
 
 export default function ProfilePage() {
