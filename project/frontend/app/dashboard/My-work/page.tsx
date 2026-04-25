@@ -1,3 +1,5 @@
+"use client";
+
 export default function MyWorkPage() {
   return (
     <div className="bg-blue-950 border border-green-900 rounded-lg p-4">

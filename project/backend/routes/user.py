@@ -1,33 +1,31 @@
 from flask import Blueprint, request, jsonify
 import pandas as pd
 import os
-from openpyxl import load_workbook
 
-# Route definition
+# Route එක අර්ථ දැක්වීම
 users_bp = Blueprint('users', __name__)
 
-# Dynamic Excel Path (Windows සහ Linux දෙකටම work කරනවා)
-def get_excel_path():
+def _find_excel():
+    base_dir = os.path.dirname(os.path.abspath(__file__))  # routes/
+    backend_dir = os.path.abspath(os.path.join(base_dir, '..'))  # backend/
     potential_paths = [
-        os.path.abspath(os.path.join(os.getcwd(), 'data.xlsx')),
-        os.path.abspath(os.path.join(os.getcwd(), 'project', 'data.xlsx')),
-        os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'data.xlsx')),
+        os.path.abspath(os.path.join(backend_dir, '..', '..', 'data.xlsx')),  # repo root
+        os.path.abspath(os.path.join(backend_dir, '..', 'data.xlsx')),        # project/
+        os.path.abspath(os.path.join(backend_dir, 'data.xlsx')),              # backend/
+        os.path.join(os.getcwd(), 'data.xlsx'),
     ]
-    
     for path in potential_paths:
         if os.path.exists(path):
             return path
     return None
 
+EXCEL_PATH = _find_excel()
+
 @users_bp.route('/api/add-user', methods=['POST'])
 def add_user():
     data = request.json
     
-    EXCEL_PATH = get_excel_path()
-    if not EXCEL_PATH:
-        return jsonify({"message": "Excel file eka soyaagatha noheka!"}), 404
-    
-    # Frontend eken ena daththa
+    # Frontend එකෙන් එන දත්ත
     full_name = data.get('fullName')
     designation = data.get('designation')
     phone = data.get('phoneNumber')
@@ -35,15 +33,14 @@ def add_user():
     username = data.get('username')
     password = data.get('password')
 
-    # Input validation
-    if not all([full_name, designation, phone, email, username, password]):
-        return jsonify({"message": "Mahatwapurna fields eka empty nane!"}), 400
-
     try:
-        # Excel eka kiyaveema
-        df = pd.read_excel(EXCEL_PATH, sheet_name='users', engine='openpyxl')
+        # Excel එක කියවීම
+        if EXCEL_PATH and os.path.exists(EXCEL_PATH):
+            df = pd.read_excel(EXCEL_PATH, sheet_name='users')
+        else:
+            return jsonify({"message": "Excel file එක සොයාගත නොහැක!"}), 404
 
-        # Validation: Duplicate check
+        # Validation
         is_duplicate = df[
             (df['Full Name'] == full_name) | 
             (df['Phone Number'] == phone) | 
@@ -52,9 +49,9 @@ def add_user():
         ]
 
         if not is_duplicate.empty:
-            return jsonify({"message": "Memma daththa system eke pavathi!"}), 400
+            return jsonify({"message": "මෙම දත්ත පද්ධතියේ දැනටමත් පවතී!"}), 400
 
-        # Aluth data row eka
+        # අලුත් දත්ත පේළිය
         new_data = {
             "Full Name": full_name,
             "Designation": designation,
@@ -64,26 +61,31 @@ def add_user():
             "Password": password
         }
 
-        # Row eka ekathu kirima
+        # අලුත් පේළිය එකතු කිරීම
         df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
 
-        # ✅ PROPER FIX: openpyxl load_workbook use කරලා sheet safe handle කරන්න
-        wb = load_workbook(EXCEL_PATH)
-        
-        # 'users' sheet exist කරන්නේ check කරන්න
-        if 'users' in wb.sheetnames:
-            wb.remove(wb['users'])
-        
-        wb.close()
-
-        # Excel ekata writing - mode='a' එකත් if_sheet_exists එකත් set කරන්න
-        with pd.ExcelWriter(EXCEL_PATH, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
+        # Excel එකට නැවත ලිවීම
+        with pd.ExcelWriter(EXCEL_PATH, engine='openpyxl', mode='w') as writer:
             df.to_excel(writer, sheet_name='users', index=False)
 
-        return jsonify({"message": "Saarthakava daththa athulath kala!"}), 200
+        return jsonify({"message": "සාර්ථකව දත්ත ඇතුළත් කළා!"}), 200
 
-    except FileNotFoundError:
-        return jsonify({"message": "Excel file eka kiyana noheka!"}), 404
     except Exception as e:
         print(f"Error: {str(e)}")
-        return jsonify({"message": f"Doshyak siduviya: {str(e)}"}), 500
+        return jsonify({"message": "දත්ත ඇතුළත් කිරීමේදී දෝෂයක් සිදුවිය."}), 500
+
+# අලුත් Route එක - මේක කලින් එකෙන් එලියට දාලා තියෙන්නේ
+@users_bp.route('/api/get-users', methods=['GET'])
+def get_users():
+    try:
+        if EXCEL_PATH and os.path.exists(EXCEL_PATH):
+            df = pd.read_excel(EXCEL_PATH, sheet_name='users')
+            # NaN (හිස්) අගයන් JSON වලට යවන්න බැරි නිසා ඒවා හිස් string එකක් කරනවා
+            df = df.fillna("") 
+            users_list = df.to_dict(orient='records') 
+            return jsonify(users_list), 200
+        else:
+            return jsonify([]), 404
+    except Exception as e:
+        print(f"Error in get_users: {str(e)}")
+        return jsonify({"message": str(e)}), 500

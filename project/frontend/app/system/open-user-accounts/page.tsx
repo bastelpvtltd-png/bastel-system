@@ -29,7 +29,7 @@ export default function OpenUserAccounts() {
   const [formData, setFormData] = useState<UserForm>(emptyForm);
 
   async function handleSubmit() {
-    const res = await fetch("http://localhost:5000/api/add-user", {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/add-user`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(formData),

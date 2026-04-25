@@ -1,3 +1,5 @@
+"use client";
+
 const jobRows = [
   { id: "J001", type: "Shipment", status: "Completed", date: "2025-04-20" },
   { id: "J002", type: "Invoice", status: "Pending", date: "2025-04-21" },

@@ -1,3 +1,5 @@
+"use client";
+
 const summaryCards = [
   { label: "Total Jobs", value: "128", color: "border-green-700" },
   { label: "Pending", value: "24", color: "border-yellow-600" },
