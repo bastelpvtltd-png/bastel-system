@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 import pandas as pd
 import os
 
@@ -153,3 +153,75 @@ def update_access():
         return jsonify({"message": "User සොයාගත නොහැක!"}), 404
     except Exception as e:
         return jsonify({"message": str(e)}), 500
+
+# ==========================================
+# LOGIN ROUTE - Excel users sheet check
+# ==========================================
+@users_bp.route('/api/login', methods=['POST'])
+def login():
+    data = request.json
+    username_input = data.get('username', '').strip()
+    password_input = data.get('password', '').strip()
+
+    if not username_input or not password_input:
+        return jsonify({"success": False, "message": "Username සහ Password අවශ්‍යයි!"}), 400
+
+    try:
+        if not EXCEL_PATH or not os.path.exists(EXCEL_PATH):
+            return jsonify({"success": False, "message": "Excel file eka soyaagatha noheka!"}), 500
+
+        df = pd.read_excel(EXCEL_PATH, sheet_name='users')
+        df = df.fillna("")
+
+        # Column E = index 4 = Username, Column F = index 5 = Password
+        # Column names වලින් හෝ index වලින් check කරනවා
+        if 'Username' in df.columns and 'Password' in df.columns:
+            username_col = 'Username'
+            password_col = 'Password'
+        else:
+            # Fallback: column index use කරනවා (E=4, F=5)
+            cols = df.columns.tolist()
+            username_col = cols[4]
+            password_col = cols[5]
+
+        # Admin check - admin users ලා සඳහා Full Name column check
+        # Admin නම් Full Name column A ඇතිනම් check
+        match = df[
+            (df[username_col].astype(str).str.strip() == username_input) &
+            (df[password_col].astype(str).str.strip() == password_input)
+        ]
+
+        if match.empty:
+            return jsonify({"success": False, "message": "Invalid username or password."}), 401
+
+        user_row = match.iloc[0]
+        full_name = str(user_row.get('Full Name', '')).strip()
+        designation = str(user_row.get('Designation', '')).strip()
+
+        # Admin check - designation "Admin" නම් හෝ username "admin" නම්
+        is_admin = (
+            username_input.lower() == 'admin' or
+            designation.lower() == 'admin'
+        )
+
+        # User permissions (main + sub tabs)
+        main_tabs_raw = str(user_row.get('Main', '')).strip()
+        sub_tabs_raw  = str(user_row.get('Sub', '')).strip()
+
+        main_tabs = [t.strip() for t in main_tabs_raw.split(',') if t.strip() and t != 'nan']
+        sub_tabs  = [t.strip() for t in sub_tabs_raw.split(',')  if t.strip() and t != 'nan']
+
+        return jsonify({
+            "success": True,
+            "username": username_input,
+            "fullName": full_name,
+            "designation": designation,
+            "isAdmin": is_admin,
+            "mainTabs": main_tabs,
+            "subTabs": sub_tabs,
+            "message": "Login successful!"
+        }), 200
+
+    except Exception as e:
+        print(f"Login Error: {str(e)}")
+        return jsonify({"success": False, "message": f"Server error: {str(e)}"}), 500

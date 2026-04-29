@@ -6,37 +6,56 @@ import { useRouter, usePathname } from "next/navigation";
 export default function SystemLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [tabs, setTabs] = useState<{ name: string; href: string }[]>([]);
+  const CACHE_KEY = "tabs_cache_system";
+
+  // localStorage cache ඉඳලා initial state load කරනවා - tabs delete වෙන්නේ නෑ
+  const [tabs, setTabs] = useState<{ name: string; href: string }[]>(() => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      return cached ? JSON.parse(cached) : [];
+    } catch { return []; }
+  });
 
   useEffect(() => {
-    // Backend එකෙන් Excel data ටික ලබා ගැනීම
+    const isAdmin = localStorage.getItem("isAdmin") === "true";
+    const allowedSubTabs: string[] = JSON.parse(localStorage.getItem("subTabs") || "[]");
+
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/nav-config`)
       .then((res) => res.json())
       .then((data) => {
-        // SYSTEM කියන MAIN ටැබ් එකට අදාළ SUB ටැබ් ටික වෙන් කර ගැනීම
-        const systemConfig = data.find((item: any) => item.label.toUpperCase() === "SYSTEM");
-        if (systemConfig) {
-          const formattedTabs = systemConfig.subs.map((sub: string) => {
-            // URL එක හැමවෙලේම simple letters වලින් සහ space වෙනුවට "-" සහිතව සාදයි
-            // උදා: "DRIVER DETAILS" -> "driver-details"
-            const folderFriendlyName = sub.toLowerCase().trim().replace(/\s+/g, "-");
-            return {
-              name: sub,
-              href: `/system/${folderFriendlyName}`
-            };
-          });
-          setTabs(formattedTabs);
+        // Backend error නම් (array නෙවෙයි) - cache ඉඳලා tabs තියෙනවා, touch නොකරනවා
+        if (!Array.isArray(data)) {
+          console.warn("nav-config error - using cached tabs:", data?.error || data);
+          return;
         }
+
+        const config = data.find((item: any) => item.label.toUpperCase() === "SYSTEM");
+        if (!config) return;
+
+        const allSubs: string[] = config.subs;
+        const filteredSubs = isAdmin
+          ? allSubs
+          : allSubs.filter((sub) =>
+              allowedSubTabs.some((s) => s.toLowerCase() === sub.toLowerCase())
+            );
+
+        const formattedTabs = filteredSubs.map((sub: string) => ({
+          name: sub,
+          href: `/system/${sub.toLowerCase().trim().replace(/\s+/g, "-")}`,
+        }));
+
+        // Cache ට save කරනවා - next time backend down නම් ඔය tabs use කරනවා
+        localStorage.setItem(CACHE_KEY, JSON.stringify(formattedTabs));
+        setTabs(formattedTabs);
       })
-      .catch((err) => console.error("System tabs load error:", err));
+      .catch((err) => {
+        // Network error නම් - warn කරනවා, tabs delete නොකරනවා
+        console.warn("System tabs fetch failed - keeping cached tabs:", err);
+      });
   }, []);
 
-  // URL එකට ගැලපෙන ටැබ් එක highlight කිරීම (Case-insensitive matching)
-  const activeTab = tabs.find(
-    (t) => t.href.toLowerCase() === pathname.toLowerCase()
-  );
-  
-  const activeTabName = activeTab ? activeTab.name : (tabs[0]?.name || "Open User Accounts");
+  const activeTab = tabs.find((t) => t.href.toLowerCase() === pathname.toLowerCase());
+  const activeTabName = activeTab ? activeTab.name : (tabs[0]?.name || "");
 
   return (
     <PageLayout
@@ -44,12 +63,8 @@ export default function SystemLayout({ children }: { children: React.ReactNode }
       tabs={tabs}
       activeTab={activeTabName}
       onTabClick={(name: string) => {
-        // ටැබ් එකක් ක්ලික් කළාම අදාළ href එකට navigate කිරීම
         const target = tabs.find((t) => t.name === name);
-        if (target) {
-          // ක්ලික් කළ විට lowercase කරන ලද URL එකට යොමු කරයි
-          router.push(target.href);
-        }
+        if (target) router.push(target.href);
       }}
     >
       {children}

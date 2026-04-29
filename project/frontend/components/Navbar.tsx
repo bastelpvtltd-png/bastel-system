@@ -21,22 +21,36 @@ export default function Navbar({ username, onLogout }: NavbarProps) {
   const [contactTab, setContactTab] = useState<"owner" | "workers">("owner");
   const [showContact, setShowContact] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-
-  // --- Dynamic Nav Data State ---
-  const [navItems, setNavItems] = useState<NavItem[]>([]);
+  const [navItems, setNavItems] = useState<NavItem[]>(() => {
+    try {
+      const cached = localStorage.getItem("tabs_cache_navbar");
+      return cached ? JSON.parse(cached) : [];
+    } catch { return []; }
+  });
 
   useEffect(() => {
     setIsMounted(true);
-    
+
+    // Admin ද user ද check
+    const isAdmin = localStorage.getItem("isAdmin") === "true";
+    const allowedMainTabs: string[] = JSON.parse(localStorage.getItem("mainTabs") || "[]");
+
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/nav-config`)
-    
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data)) {
-          setNavItems(data);
+        if (!Array.isArray(data)) {
+          console.warn("nav-config error - using cached nav items:", data?.error || data);
+          return;
         }
+        const result = isAdmin
+          ? data
+          : data.filter((item: NavItem) =>
+              allowedMainTabs.some((t) => t.toLowerCase() === item.label.toLowerCase())
+            );
+        localStorage.setItem("tabs_cache_navbar", JSON.stringify(result));
+        setNavItems(result);
       })
-      .catch((err) => console.error("Error loading nav config:", err));
+      .catch((err) => console.warn("Navbar nav-config fetch failed - keeping cached items:", err));
   }, []);
 
   return (
@@ -46,7 +60,6 @@ export default function Navbar({ username, onLogout }: NavbarProps) {
         <h1 className="text-green-400 font-bold text-xl tracking-widest">BASTEL PVT LTD</h1>
 
         <div className="flex items-center gap-2">
-          {/* Excel එකෙන් එන Main Tabs මෙතන load වෙනවා */}
           {navItems.map((item) => (
             <button
               key={item.label}
@@ -104,7 +117,7 @@ export default function Navbar({ username, onLogout }: NavbarProps) {
         <p className="text-gray-500 text-xs mt-1">BASTEL PVT LTD — Version 1.2.0</p>
       </footer>
 
-      {/* MODALs (Mails / Messages / Contact) */}
+      {/* MODALs */}
       {activeModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="bg-gray-900 border border-green-800 rounded-lg shadow-xl w-[420px] p-6">
