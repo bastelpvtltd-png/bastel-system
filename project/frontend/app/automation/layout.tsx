@@ -1,4 +1,5 @@
 "use client";
+import { getNavConfig } from "@/lib/navCache";
 import { useState, useEffect } from "react";
 import PageLayout from "@/components/PageLayout";
 import { useRouter, usePathname } from "next/navigation";
@@ -8,63 +9,52 @@ export default function AutomationLayout({ children }: { children: React.ReactNo
   const pathname = usePathname();
   const CACHE_KEY = "tabs_cache_automation";
 
-  // localStorage cache ඉඳලා initial state load කරනවා - tabs delete වෙන්නේ නෑ
-  const [tabs, setTabs] = useState<{ name: string; href: string }[]>(() => {
-    try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      return cached ? JSON.parse(cached) : [];
-    } catch { return []; }
-  });
+  // SSR safe: empty init, load from cache in useEffect
+  const [tabs, setTabs] = useState<{ name: string; href: string }[]>([]);
 
   useEffect(() => {
+    // 1. Instant load from cache (no flicker)
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.length > 0) setTabs(parsed);
+      }
+    } catch {}
+
+    // 2. Background fetch to update cache
     const isAdmin = localStorage.getItem("isAdmin") === "true";
     const allowedSubTabs: string[] = JSON.parse(localStorage.getItem("subTabs") || "[]");
 
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/nav-config`)
-      .then((res) => res.json())
-      .then((data) => {
-        // Backend error නම් (array නෙවෙයි) - cache ඉඳලා tabs තියෙනවා, touch නොකරනවා
-        if (!Array.isArray(data)) {
-          console.warn("nav-config error - using cached tabs:", data?.error || data);
-          return;
-        }
-
+    getNavConfig().then(data => {
+        if (!Array.isArray(data)) return;
         const config = data.find((item: any) => item.label.toUpperCase() === "AUTOMATION");
         if (!config) return;
-
-        const allSubs: string[] = config.subs;
-        const filteredSubs = isAdmin
-          ? allSubs
-          : allSubs.filter((sub) =>
-              allowedSubTabs.some((s) => s.toLowerCase() === sub.toLowerCase())
+        const subs: string[] = isAdmin
+          ? config.subs
+          : config.subs.filter((s: string) =>
+              allowedSubTabs.some((a: string) => a.toLowerCase() === s.toLowerCase())
             );
-
-        const formattedTabs = filteredSubs.map((sub: string) => ({
+        const formatted = subs.map((sub: string) => ({
           name: sub,
           href: `/automation/${sub.toLowerCase().trim().replace(/\s+/g, "-")}`,
         }));
-
-        // Cache ට save කරනවා - next time backend down නම් ඔය tabs use කරනවා
-        localStorage.setItem(CACHE_KEY, JSON.stringify(formattedTabs));
-        setTabs(formattedTabs);
+        localStorage.setItem(CACHE_KEY, JSON.stringify(formatted));
+        setTabs(formatted);
       })
-      .catch((err) => {
-        // Network error නම් - warn කරනවා, tabs delete නොකරනවා
-        console.warn("Automation tabs fetch failed - keeping cached tabs:", err);
-      });
+      .catch(() => {}); // Keep cache on error
   }, []);
 
-  const activeTab = tabs.find((t) => t.href.toLowerCase() === pathname.toLowerCase());
-  const activeTabName = activeTab ? activeTab.name : (tabs[0]?.name || "");
+  const activeTab = tabs.find(t => t.href.toLowerCase() === pathname.toLowerCase());
 
   return (
     <PageLayout
       title="Automation"
       tabs={tabs}
-      activeTab={activeTabName}
+      activeTab={activeTab?.name || tabs[0]?.name || ""}
       onTabClick={(name: string) => {
-        const target = tabs.find((t) => t.name === name);
-        if (target) router.push(target.href);
+        const t = tabs.find(x => x.name === name);
+        if (t) router.push(t.href);
       }}
     >
       {children}

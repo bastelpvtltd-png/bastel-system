@@ -184,11 +184,17 @@ def login():
             username_col = cols[4]
             password_col = cols[5]
 
-        # Admin check - admin users ලා සඳහා Full Name column check
-        # Admin නම් Full Name column A ඇතිනම් check
+        # Normalize columns to string first (Excel may store passwords as numbers e.g. 1234 -> int)
+        # This fixes login working in dev but failing after build
+        df[username_col] = df[username_col].astype(str).str.strip()
+        df[password_col] = df[password_col].astype(str).str.strip()
+        # Remove trailing .0 that pandas adds when reading integers from Excel (e.g. "1234.0" -> "1234")
+        df[password_col] = df[password_col].str.replace(r'\.0$', '', regex=True)
+        df[username_col] = df[username_col].str.replace(r'\.0$', '', regex=True)
+
         match = df[
-            (df[username_col].astype(str).str.strip() == username_input) &
-            (df[password_col].astype(str).str.strip() == password_input)
+            (df[username_col] == username_input) &
+            (df[password_col] == password_input)
         ]
 
         if match.empty:
@@ -225,3 +231,274 @@ def login():
     except Exception as e:
         print(f"Login Error: {str(e)}")
         return jsonify({"success": False, "message": f"Server error: {str(e)}"}), 500
+
+
+# ==========================================
+# MESSAGES SYSTEM
+# ==========================================
+
+MESSAGES_SHEET = 'messages'
+
+def _ensure_messages_sheet():
+    """messages sheet නැත්නම් create කරනවා"""
+    if not EXCEL_PATH or not os.path.exists(EXCEL_PATH):
+        return False
+    try:
+        from openpyxl import load_workbook
+        wb = load_workbook(EXCEL_PATH)
+        if MESSAGES_SHEET not in wb.sheetnames:
+            ws = wb.create_sheet(MESSAGES_SHEET)
+            ws.append(['id', 'from_user', 'to_user', 'message', 'timestamp', 'is_read'])
+            wb.save(EXCEL_PATH)
+        return True
+    except Exception as e:
+        print(f"Messages sheet error: {e}")
+        return False
+
+@users_bp.route('/api/messages/send', methods=['POST'])
+def send_message():
+    data = request.json
+    from_user = data.get('from_user', '').strip()
+    to_user = data.get('to_user', '').strip()
+    message = data.get('message', '').strip()
+
+    if not from_user or not to_user or not message:
+        return jsonify({"success": False, "message": "Fields missing"}), 400
+
+    try:
+        _ensure_messages_sheet()
+        from openpyxl import load_workbook
+        from datetime import datetime
+
+        wb = load_workbook(EXCEL_PATH)
+        ws = wb[MESSAGES_SHEET]
+
+        # Generate ID
+        rows = list(ws.iter_rows(min_row=2, values_only=True))
+        new_id = len(rows) + 1
+
+        ws.append([
+            new_id,
+            from_user,
+            to_user,
+            message,
+            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            0  # unread
+        ])
+        wb.save(EXCEL_PATH)
+        return jsonify({"success": True, "message": "Sent!"}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@users_bp.route('/api/messages/inbox', methods=['POST'])
+def get_inbox():
+    data = request.json
+    username = data.get('username', '').strip()
+    try:
+        _ensure_messages_sheet()
+        df = pd.read_excel(EXCEL_PATH, sheet_name=MESSAGES_SHEET)
+        df = df.fillna('')
+        inbox = df[df['to_user'].astype(str).str.strip() == username]
+        msgs = inbox.sort_values('timestamp', ascending=False).to_dict('records')
+        return jsonify({"success": True, "messages": msgs}), 200
+    except Exception as e:
+        return jsonify({"success": False, "messages": [], "error": str(e)}), 500
+
+
+@users_bp.route('/api/messages/unread-count', methods=['POST'])
+def unread_count():
+    data = request.json
+    username = data.get('username', '').strip()
+    try:
+        _ensure_messages_sheet()
+        df = pd.read_excel(EXCEL_PATH, sheet_name=MESSAGES_SHEET)
+        df = df.fillna('')
+        count = len(df[
+            (df['to_user'].astype(str).str.strip() == username) &
+            (df['is_read'].astype(str).str.strip() == '0')
+        ])
+        return jsonify({"success": True, "count": count}), 200
+    except Exception as e:
+        return jsonify({"success": False, "count": 0}), 500
+
+
+@users_bp.route('/api/messages/mark-read', methods=['POST'])
+def mark_read():
+    data = request.json
+    msg_id = data.get('id')
+    try:
+        from openpyxl import load_workbook
+        wb = load_workbook(EXCEL_PATH)
+        ws = wb[MESSAGES_SHEET]
+        for row in ws.iter_rows(min_row=2):
+            if str(row[0].value) == str(msg_id):
+                row[5].value = 1
+                break
+        wb.save(EXCEL_PATH)
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        return jsonify({"success": False}), 500
+
+
+@users_bp.route('/api/messages/users-list', methods=['GET'])
+def get_users_list():
+    """Message කරන්න available users list"""
+    try:
+        df = pd.read_excel(EXCEL_PATH, sheet_name='users')
+        df = df.fillna('')
+        users = []
+        for _, row in df.iterrows():
+            uname = str(row.get('Username', '')).strip()
+            fname = str(row.get('Full Name', '')).strip()
+            if uname:
+                users.append({"username": uname, "fullName": fname})
+        return jsonify({"success": True, "users": users}), 200
+    except Exception as e:
+        return jsonify({"success": False, "users": []}), 500
+
+
+# ==========================================
+# PROFILE - GET & UPDATE
+# ==========================================
+
+@users_bp.route('/api/profile/get', methods=['POST'])
+def get_profile():
+    data = request.json
+    username = data.get('username', '').strip()
+    try:
+        df = pd.read_excel(EXCEL_PATH, sheet_name='users')
+        df = df.fillna('')
+        user = df[df['Username'].astype(str).str.strip() == username]
+        if user.empty:
+            return jsonify({"success": False}), 404
+        row = user.iloc[0]
+        return jsonify({
+            "success": True,
+            "fullName": str(row.get('Full Name', '')),
+            "designation": str(row.get('Designation', '')),
+            "phoneNumber": str(row.get('Phone Number', '')),
+            "email": str(row.get('Email', '')),
+            "username": str(row.get('Username', '')),
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@users_bp.route('/api/profile/update', methods=['POST'])
+def update_profile():
+    data = request.json
+    username = data.get('username', '').strip()
+    try:
+        from openpyxl import load_workbook
+        wb = load_workbook(EXCEL_PATH)
+        ws = wb['users']
+        headers = [cell.value for cell in ws[1]]
+
+        col_map = {
+            'Full Name': headers.index('Full Name') + 1 if 'Full Name' in headers else None,
+            'Designation': headers.index('Designation') + 1 if 'Designation' in headers else None,
+            'Phone Number': headers.index('Phone Number') + 1 if 'Phone Number' in headers else None,
+            'Email': headers.index('Email') + 1 if 'Email' in headers else None,
+        }
+
+        uname_col = headers.index('Username') + 1
+
+        for row in ws.iter_rows(min_row=2):
+            if str(row[uname_col - 1].value).strip() == username:
+                if col_map['Full Name']: row[col_map['Full Name'] - 1].value = data.get('fullName', '')
+                if col_map['Designation']: row[col_map['Designation'] - 1].value = data.get('designation', '')
+                if col_map['Phone Number']: row[col_map['Phone Number'] - 1].value = data.get('phoneNumber', '')
+                if col_map['Email']: row[col_map['Email'] - 1].value = data.get('email', '')
+                break
+
+        wb.save(EXCEL_PATH)
+        return jsonify({"success": True, "message": "Profile updated!"}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@users_bp.route('/api/profile/change-password', methods=['POST'])
+def change_password():
+    data = request.json
+    username = data.get('username', '').strip()
+    current_pw = data.get('currentPassword', '').strip()
+    new_pw = data.get('newPassword', '').strip()
+    try:
+        from openpyxl import load_workbook
+        wb = load_workbook(EXCEL_PATH)
+        ws = wb['users']
+        headers = [cell.value for cell in ws[1]]
+        uname_col = headers.index('Username') + 1
+        pw_col = headers.index('Password') + 1
+
+        for row in ws.iter_rows(min_row=2):
+            if str(row[uname_col - 1].value).strip() == username:
+                if str(row[pw_col - 1].value).strip() != current_pw:
+                    return jsonify({"success": False, "message": "Current password incorrect!"}), 401
+                row[pw_col - 1].value = new_pw
+                wb.save(EXCEL_PATH)
+                return jsonify({"success": True, "message": "Password changed!"}), 200
+
+        return jsonify({"success": False, "message": "User not found"}), 404
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@users_bp.route('/api/messages/delete', methods=['POST'])
+def delete_message():
+    data = request.json
+    msg_id = data.get('id')
+    username = data.get('username', '').strip()
+    try:
+        from openpyxl import load_workbook
+        wb = load_workbook(EXCEL_PATH)
+        ws = wb[MESSAGES_SHEET]
+        for row in ws.iter_rows(min_row=2):
+            if str(row[0].value) == str(msg_id):
+                # Only allow delete if user is sender or receiver
+                if str(row[1].value).strip() == username or str(row[2].value).strip() == username:
+                    ws.delete_rows(row[0].row)
+                    wb.save(EXCEL_PATH)
+                    return jsonify({"success": True}), 200
+                else:
+                    return jsonify({"success": False, "message": "Permission denied"}), 403
+        return jsonify({"success": False, "message": "Message not found"}), 404
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@users_bp.route('/api/messages/conversation', methods=['POST'])
+def get_conversation():
+    """Get all messages between two users (both directions)"""
+    data = request.json
+    user1 = data.get('user1', '').strip()
+    user2 = data.get('user2', '').strip()
+    try:
+        _ensure_messages_sheet()
+        df = pd.read_excel(EXCEL_PATH, sheet_name=MESSAGES_SHEET)
+        df = df.fillna('')
+        conv = df[
+            ((df['from_user'].astype(str).str.strip() == user1) & (df['to_user'].astype(str).str.strip() == user2)) |
+            ((df['from_user'].astype(str).str.strip() == user2) & (df['to_user'].astype(str).str.strip() == user1))
+        ]
+        msgs = conv.sort_values('timestamp').to_dict('records')
+        return jsonify({"success": True, "messages": msgs}), 200
+    except Exception as e:
+        return jsonify({"success": False, "messages": [], "error": str(e)}), 500
+
+
+@users_bp.route('/api/messages/sent', methods=['POST'])
+def get_sent():
+    """Get sent messages by a user"""
+    data = request.json
+    username = data.get('username', '').strip()
+    try:
+        _ensure_messages_sheet()
+        df = pd.read_excel(EXCEL_PATH, sheet_name=MESSAGES_SHEET)
+        df = df.fillna('')
+        sent = df[df['from_user'].astype(str).str.strip() == username]
+        msgs = sent.sort_values('timestamp', ascending=False).to_dict('records')
+        return jsonify({"success": True, "messages": msgs}), 200
+    except Exception as e:
+        return jsonify({"success": False, "messages": []}), 500

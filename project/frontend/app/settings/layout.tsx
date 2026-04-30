@@ -1,70 +1,73 @@
 "use client";
+import { getNavConfig } from "@/lib/navCache";
 import { useState, useEffect } from "react";
 import PageLayout from "@/components/PageLayout";
 import { useRouter, usePathname } from "next/navigation";
+
+// These tabs are ALWAYS available to every logged-in user (own settings)
+const ALWAYS_TABS = [
+  { name: "Profile",   href: "/settings/profile" },
+  { name: "Security",  href: "/settings/security" },
+];
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const CACHE_KEY = "tabs_cache_settings";
-
-  // localStorage cache ඉඳලා initial state load කරනවා - tabs delete වෙන්නේ නෑ
-  const [tabs, setTabs] = useState<{ name: string; href: string }[]>(() => {
-    try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      return cached ? JSON.parse(cached) : [];
-    } catch { return []; }
-  });
+  const [tabs, setTabs] = useState<{ name: string; href: string }[]>(ALWAYS_TABS);
 
   useEffect(() => {
+    // Load cached first
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.length > 0) setTabs(parsed);
+      }
+    } catch {}
+
     const isAdmin = localStorage.getItem("isAdmin") === "true";
     const allowedSubTabs: string[] = JSON.parse(localStorage.getItem("subTabs") || "[]");
 
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/nav-config`)
-      .then((res) => res.json())
-      .then((data) => {
-        // Backend error නම් (array නෙවෙයි) - cache ඉඳලා tabs තියෙනවා, touch නොකරනවා
-        if (!Array.isArray(data)) {
-          console.warn("nav-config error - using cached tabs:", data?.error || data);
-          return;
+    getNavConfig().then(data => {
+        if (!Array.isArray(data)) return;
+        const config = data.find((item: any) => item.label.toUpperCase() === "SETTINGS");
+
+        // Extra tabs from nav-config (admin or permitted)
+        let extraSubs: string[] = [];
+        if (config) {
+          extraSubs = isAdmin
+            ? config.subs
+            : config.subs.filter((s: string) =>
+                allowedSubTabs.some((a: string) => a.toLowerCase() === s.toLowerCase())
+              );
         }
 
-        const config = data.find((item: any) => item.label.toUpperCase() === "SETTINGS");
-        if (!config) return;
+        // Merge: always tabs + extra (deduplicate by href)
+        const extraFormatted = extraSubs
+          .map((sub: string) => ({
+            name: sub,
+            href: `/settings/${sub.toLowerCase().trim().replace(/\s+/g, "-")}`,
+          }))
+          .filter(t => !ALWAYS_TABS.some(a => a.href === t.href));
 
-        const allSubs: string[] = config.subs;
-        const filteredSubs = isAdmin
-          ? allSubs
-          : allSubs.filter((sub) =>
-              allowedSubTabs.some((s) => s.toLowerCase() === sub.toLowerCase())
-            );
-
-        const formattedTabs = filteredSubs.map((sub: string) => ({
-          name: sub,
-          href: `/settings/${sub.toLowerCase().trim().replace(/\s+/g, "-")}`,
-        }));
-
-        // Cache ට save කරනවා - next time backend down නම් ඔය tabs use කරනවා
-        localStorage.setItem(CACHE_KEY, JSON.stringify(formattedTabs));
-        setTabs(formattedTabs);
+        const merged = [...ALWAYS_TABS, ...extraFormatted];
+        localStorage.setItem(CACHE_KEY, JSON.stringify(merged));
+        setTabs(merged);
       })
-      .catch((err) => {
-        // Network error නම් - warn කරනවා, tabs delete නොකරනවා
-        console.warn("Settings tabs fetch failed - keeping cached tabs:", err);
-      });
+      .catch(() => {}); // Keep ALWAYS_TABS on error
   }, []);
 
-  const activeTab = tabs.find((t) => t.href.toLowerCase() === pathname.toLowerCase());
-  const activeTabName = activeTab ? activeTab.name : (tabs[0]?.name || "");
+  const activeTab = tabs.find(t => t.href.toLowerCase() === pathname.toLowerCase());
 
   return (
     <PageLayout
       title="Settings"
       tabs={tabs}
-      activeTab={activeTabName}
+      activeTab={activeTab?.name || "Profile"}
       onTabClick={(name: string) => {
-        const target = tabs.find((t) => t.name === name);
-        if (target) router.push(target.href);
+        const t = tabs.find(x => x.name === name);
+        if (t) router.push(t.href);
       }}
     >
       {children}

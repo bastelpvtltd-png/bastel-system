@@ -2,11 +2,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+const API = process.env.NEXT_PUBLIC_API_URL;
+
 export default function HomePage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError]   = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleLogin() {
@@ -14,44 +16,95 @@ export default function HomePage() {
       setError("Username සහ Password ඇතුළත් කරන්න.");
       return;
     }
-
     setLoading(true);
     setError("");
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
+      // 1. Login + nav-config parallel ව fetch
+      const [loginRes, navRes] = await Promise.all([
+        fetch(`${API}/api/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        }),
+        fetch(`${API}/api/nav-config`),
+      ]);
 
-      const data = await res.json();
+      const loginData = await loginRes.json();
 
-      if (res.ok && data.success) {
-        // Login state save
-        localStorage.setItem("isLoggedIn", "true");
-        localStorage.setItem("username", data.username);
-        localStorage.setItem("fullName", data.fullName || "");
-        localStorage.setItem("designation", data.designation || "");
-        localStorage.setItem("isAdmin", data.isAdmin ? "true" : "false");
-        localStorage.setItem("mainTabs", JSON.stringify(data.mainTabs || []));
-        localStorage.setItem("subTabs", JSON.stringify(data.subTabs || []));
+      if (!loginRes.ok || !loginData.success) {
+        setError(loginData.message || "Invalid username or password.");
+        setLoading(false);
+        return;
+      }
 
-        if (data.isAdmin) {
-          router.push("/dashboard");
-        } else if (data.mainTabs && data.mainTabs.length > 0) {
-          const firstTab = data.mainTabs[0].toLowerCase().replace(/\s+/g, "-");
-          router.push(`/${firstTab}`);
-        } else {
-          setError("ඔබට කිසිදු access permissions නොමැත. Admin හා සම්බන්ධ වන්න.");
-          setLoading(false);
-          return;
+      // 2. Save user data
+      const isAdmin = loginData.isAdmin as boolean;
+      const mainTabs: string[] = loginData.mainTabs || [];
+      const subTabs:  string[] = loginData.subTabs  || [];
+
+      localStorage.setItem("isLoggedIn",   "true");
+      localStorage.setItem("username",     loginData.username);
+      localStorage.setItem("fullName",     loginData.fullName     || "");
+      localStorage.setItem("designation",  loginData.designation  || "");
+      localStorage.setItem("isAdmin",      isAdmin ? "true" : "false");
+      localStorage.setItem("mainTabs",     JSON.stringify(mainTabs));
+      localStorage.setItem("subTabs",      JSON.stringify(subTabs));
+
+      // 3. Pre-cache nav tabs so layouts load instantly
+      try {
+        const navData = await navRes.json();
+        if (Array.isArray(navData)) {
+          // Navbar cache
+          const navbarItems = isAdmin
+            ? navData
+            : navData.filter((item: any) =>
+                mainTabs.some((t: string) => t.toLowerCase() === item.label.toLowerCase())
+              );
+          localStorage.setItem("tabs_cache_navbar", JSON.stringify(navbarItems));
+
+          // Per-section tab caches
+          for (const section of navData) {
+            const base = section.label.toLowerCase().replace(/\s+/g, "-");
+            const allSubs: string[] = section.subs || [];
+            const filtered = isAdmin
+              ? allSubs
+              : allSubs.filter((s: string) =>
+                  subTabs.some((a: string) => a.toLowerCase() === s.toLowerCase())
+                );
+            const formatted = filtered.map((sub: string) => ({
+              name: sub,
+              href: `/${base}/${sub.toLowerCase().trim().replace(/\s+/g, "-")}`,
+            }));
+            localStorage.setItem(`tabs_cache_${base}`, JSON.stringify(formatted));
+          }
+
+          // Settings always gets Profile + Security
+          const settingsBase = [
+            { name: "Profile",  href: "/settings/profile"  },
+            { name: "Security", href: "/settings/security" },
+          ];
+          const settingsCached = localStorage.getItem("tabs_cache_settings");
+          const existingExtra = settingsCached
+            ? JSON.parse(settingsCached).filter(
+                (t: any) => !settingsBase.some(s => s.href === t.href)
+              )
+            : [];
+          localStorage.setItem("tabs_cache_settings", JSON.stringify([...settingsBase, ...existingExtra]));
         }
+      } catch {}
+
+      // 4. Redirect
+      if (isAdmin) {
+        router.push("/dashboard");
+      } else if (mainTabs.length > 0) {
+        router.push(`/${mainTabs[0].toLowerCase().replace(/\s+/g, "-")}`);
       } else {
-        setError(data.message || "Invalid username or password.");
+        setError("ඔබට කිසිදු access permissions නොමැත. Admin හා සම්බන්ධ වන්න.");
         setLoading(false);
       }
-    } catch (err) {
+
+    } catch {
       setError("Server එකට connect වෙන්න බැරිය. Backend running දැයි check කරන්න.");
       setLoading(false);
     }
@@ -80,15 +133,15 @@ export default function HomePage() {
             type="text"
             placeholder="Username"
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={e => setUsername(e.target.value)}
             className="w-full mb-3 p-3 bg-gray-900 border border-green-800 rounded text-white placeholder-gray-500 focus:outline-none focus:border-green-400 transition"
           />
           <input
             type="password"
             placeholder="Password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+            onChange={e => setPassword(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleLogin()}
             className="w-full mb-4 p-3 bg-gray-900 border border-green-800 rounded text-white placeholder-gray-500 focus:outline-none focus:border-green-400 transition"
           />
 
@@ -106,7 +159,9 @@ export default function HomePage() {
             {loading ? "Verifying..." : "LOGIN"}
           </button>
 
-          <p className="text-gray-600 text-xs text-center mt-4">Unauthorized access is strictly prohibited and monitored.</p>
+          <p className="text-gray-600 text-xs text-center mt-4">
+            Unauthorized access is strictly prohibited and monitored.
+          </p>
         </div>
       </main>
 

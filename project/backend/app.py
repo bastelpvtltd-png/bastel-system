@@ -69,7 +69,9 @@ def get_nav_config():
                 "subs": subs
             })
 
-        return jsonify(nav_data)
+        response = jsonify(nav_data)
+        response.headers['Cache-Control'] = 'public, max-age=120'  # 2 min cache
+        return response
 
     except Exception as e:
         return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500
