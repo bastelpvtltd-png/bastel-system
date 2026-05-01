@@ -1,6 +1,4 @@
-Flask
-Flask-Cors
-gunicorn
-psycopg2-binary
-pandas
-openpyxl
+flask
+flask-cors
+supabase
+python-dotenv
