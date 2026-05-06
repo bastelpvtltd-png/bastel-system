@@ -1,7 +1,8 @@
 "use client";
 import { useState } from "react";
 
-const API = process.env.NEXT_PUBLIC_API_URL;
+import { getApiUrl } from "@/lib/api";
+const API = getApiUrl();
 
 export default function SecurityPage() {
   const [form, setForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });

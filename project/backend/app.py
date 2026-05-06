@@ -57,6 +57,11 @@ if users_bp:
 def index():
     return "Bastel System Backend is Running Successfully! (Supabase)"
 
+# Render health check — මේක නැතිව deploy fail වෙනවා
+@app.route('/health')
+def health():
+    return jsonify({"status": "ok"}), 200
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

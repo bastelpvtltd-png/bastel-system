@@ -2,7 +2,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
-const API = process.env.NEXT_PUBLIC_API_URL;
+import { getApiUrl } from "@/lib/api";
+const API = getApiUrl();
 
 interface NavItem { label: string; href: string; subs: string[]; }
 interface NavbarProps { username: string; isAdmin?: boolean; onLogout: () => void; }

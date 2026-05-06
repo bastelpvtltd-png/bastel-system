@@ -1,3 +1,4 @@
+import { getApiUrl } from "@/lib/api";
 /**
  * navCache.ts  – nav-config ek hadama ekkai fetch wenawa.
  * Layout mount wena hadama ekk ekk fetch karanne nha.
@@ -26,7 +27,7 @@ export async function getNavConfig(): Promise<any[]> {
   } catch {}
 
   // 3. Fetch (one request only)
-  _inFlight = fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/nav-config`)
+  _inFlight = fetch(`${getApiUrl()}/api/nav-config`)
     .then(r => r.json())
     .then(data => {
       if (Array.isArray(data)) {

@@ -20,7 +20,7 @@ export default function SystemPage() {
     const isAdmin = localStorage.getItem("isAdmin") === "true";
     const allowedSubs: string[] = JSON.parse(localStorage.getItem("subTabs") || "[]");
 
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/nav-config`)
+    fetch(`${API}/api/nav-config`)
       .then(r => r.json())
       .then(data => {
         if (!Array.isArray(data)) return;

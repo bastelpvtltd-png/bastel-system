@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 
-const API = process.env.NEXT_PUBLIC_API_URL;
+import { getApiUrl } from "@/lib/api";
+const API = getApiUrl();
 
 interface AccessForm {
   fullName: string;
