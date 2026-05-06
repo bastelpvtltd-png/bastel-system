@@ -1,7 +1,6 @@
 "use client";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-const API = process.env.NEXT_PUBLIC_API_URL;
 
 export default function AutomationPage() {
   const router = useRouter();
